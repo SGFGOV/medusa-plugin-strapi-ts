@@ -1,4 +1,10 @@
 class StrapiSubscriber {
+
+  productVariantService_: any
+  productService_: any
+  strapiService_: any
+  eventBus_: any
+  
   constructor({
     updateStrapiService,
     productVariantService,

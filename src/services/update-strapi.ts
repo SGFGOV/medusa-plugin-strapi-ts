@@ -1,6 +1,5 @@
 import { BaseService } from "medusa-interfaces"
 import axios, { Method } from "axios"
-import Response from "express"
 const crypto = require('crypto');
 
 const IGNORE_THRESHOLD = 3 // seconds
@@ -628,7 +627,7 @@ class UpdateStrapiService extends BaseService {
   async configureStrapiMedusa(): Promise<any>
   {
     try{
-    const result=  await axios.post(`${ this.strapi_URL_STRING|| "http://localhost:1337 "}/synchronise-medusa-tables`, {})
+    const result=  await axios.post(`${ this.strapi_URL_STRING|| "http://localhost:1337 "}/api/synchronise-medusa-tables`, {})
     console.log("successfully configured two way sync<-->medusa")  
     return result;
       
