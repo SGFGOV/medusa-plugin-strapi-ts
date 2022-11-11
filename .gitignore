@@ -25,3 +25,4 @@ index.*
 ./yarn.json
 
 *.log
+*.tgz

@@ -1,48 +1,37 @@
-import StrapiService from "../update-strapi";
+import StrapiService, { StrapiMedusaPluginOptions } from "../update-strapi";
 import { jest, describe, expect, beforeEach, it } from "@jest/globals";
 import { regionService, productService, redisClient,
-  productVariantService, eventBusService } from "../__mocks__/service-mocks";
-import axios from "axios";
-import MockAdapter from "axios-mock-adapter";
+  productVariantService, eventBusService,
+  logger,
+  enableMocks,
+  disableMocks } from "../__mocks__/service-mocks";
+import { randomInt } from "crypto";
+
 
 // This sets the mock adapter on the default instance
-const mock = new MockAdapter(axios);
 
-mock.onPut().reply(200);
-mock.onGet().reply(200, {
-  users: [{ id: 1, name: "John Smith", email: "John.smith@test.com" }],
-});
-
-mock.onGet("/api/products").reply(200, {
-  id: "product",
-});
-
-mock.onPost("/api/auth/local/register").reply(200,
-    {
-      jwt: "jsgfkjdsgsdgsjdgl2343535235",
-      profile: { id: 1, name: "John Smith", email: "John.smith@test.com" },
-    });
-const authUrl = "/api/auth/";
-const authRegEx = new RegExp(`${authUrl}/*`);
-mock.onPost(authRegEx).reply(200,
-    {
-      jwt: "jsgfkjdsgsdgsjdgl2343535235",
-      profile: { id: 1, name: "John Smith", email: "John.smith@test.com" },
-    });
-
-mock.onPost("/api/medusa/setup").reply(200);
-const apiUrl = "/api";
-const apiRegEx = new RegExp(`${apiUrl}/*`);
-mock.onPost(apiRegEx).reply(200, {
-  jwt: "jsgfkjdsgsdgsjdgl2343535235",
-  profile: { id: 1, name: "John Smith", email: "John.smith@test.com" },
-});
-
-mock.onHead("/_health").reply(200);
 
 let service:StrapiService;
 
 describe("StrapiService", () => {
+  const strapiConfigParameters: StrapiMedusaPluginOptions = {
+    encryption_algorithm: "aes-256-cbc",
+    strapi_protocol: "http",
+    strapi_default_user_username: "testuser",
+    strapi_host: "172.31.34.235",
+    strapi_default_user_password: "testuser",
+    strapi_default_user_email_address: "test1@test.com",
+    strapi_default_user_firstname: "test1user",
+    strapi_default_user_lastname: "test1user",
+    strapi_admin_username: "SuperUser",
+    strapi_admin_secret: "MedusaStrapi1",
+    strapi_admin_email: "support@medusa-commerce.com",
+    strapi_port: "1337",
+    strapi_secret: "test",
+    strapi_public_key: undefined,
+    strapi_ignore_threshold: 0,
+  };
+
   service = new StrapiService(
       {
         regionService,
@@ -50,12 +39,9 @@ describe("StrapiService", () => {
         redisClient,
         productVariantService,
         eventBusService,
+        logger,
       },
-      {
-        strapi_default_username: "test_id",
-        strapi_default_password: "master",
-        access_token: "test_token",
-      },
+      strapiConfigParameters,
   );
 
   const entry = {
@@ -73,19 +59,43 @@ describe("StrapiService", () => {
 
 
   beforeEach(() => {
+    enableMocks();
     jest.clearAllMocks();
+    service.strapiDefaultUserAuthToken="";
   });
 
-  describe("archiveProductInStrapi", () => {
-    const spy = jest.spyOn(service, "getType");
-    it("Calls entry.unpublish and entry.archive", async () => {
-      const result = await service.createProductInStrapi( "exists" );
-      expect(result).toBeDefined();
+  describe("health check", ()=>{
+    it("check health", async ()=>{
+      expect(service).toBeDefined();
+      expect(service.checkStrapiHealth()).toBeTruthy();
+    });
+  });
 
-      expect(spy).toHaveBeenCalledTimes(1);
+  describe("create or register admin", ()=>{
+    it("register or login addmin", async ()=>{
+      await service.registerOrLoginAdmin();
+      expect(service.strapiAdminAuthToken).toBeDefined();
+      expect(service.strapiAdminAuthToken.length).toBeGreaterThan(0);
     });
 
-    /* it("Doesn't call entry.unpublish and entry.archive 
+    it("register or login default user", async () => {
+      await service.registerOrLoginDefaultUser();
+      expect(service.strapiDefaultUserAuthToken).toBeDefined();
+      expect(service.strapiDefaultUserAuthToken.length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe("create product in strapi", () => {
+  const spy = jest.spyOn(service, "getType");
+  it("Calls entry.unpublish and entry.archive", async () => {
+    const result = await service.createProductInStrapi( "exists" );
+    expect(result).toBeDefined();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  /* it("Doesn't call entry.unpublish and entry.archive
     if the product still exists in medusa", async () => {
         await service.createProductInStrapi("exists")
 
@@ -93,7 +103,7 @@ describe("StrapiService", () => {
         expect(entry.archive).toHaveBeenCalledTimes(0)
       })
 
-      it("Doesn't call productService if 
+      it("Doesn't call productService if
       request should be ignored", async () => {
         await service.({ id: "ignored" })
 
@@ -101,7 +111,7 @@ describe("StrapiService", () => {
         expect(entry.unpublish).toHaveBeenCalledTimes(0)
         expect(entry.archive).toHaveBeenCalledTimes(0)
       })*/
-  });
+
 /*
     describe("archiveProductVariantInStrapi", () => {
       it("Calls entry.unpublish and entry.archive", async () => {
@@ -145,7 +155,7 @@ describe("StrapiService", () => {
         expect(entry.archive).toHaveBeenCalledTimes(0)
       })
 
-      it("Doesn't call RegionService 
+      it("Doesn't call RegionService
       if request should be ignored", async () => {
         await service.archiveRegionInStrapi({ id: "ignored" })
 
