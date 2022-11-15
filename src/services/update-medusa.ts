@@ -59,7 +59,7 @@ class UpdateMedusaService extends BaseService {
         return updatedVariant;
       }
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
       return;
     }
   }
@@ -112,7 +112,7 @@ class UpdateMedusaService extends BaseService {
         });
       }
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
       return;
     }
   }
@@ -140,7 +140,7 @@ class UpdateMedusaService extends BaseService {
         return updatedRegion;
       }
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
       return;
     }
   }

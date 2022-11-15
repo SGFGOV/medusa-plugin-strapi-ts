@@ -12,6 +12,16 @@ export const regionService = {
     return Promise.resolve(undefined);
   }),
 };
+
+export const storeService = {
+  retrieveByStoreId: jest.fn((id) => {
+    if (id === "exists") {
+      return Promise.resolve({ id: "exists" });
+    }
+    return Promise.resolve(undefined);
+  }),
+};
+
 export const productService = {
   retrieve: jest.fn((id) => {
     if (id === "exists") {
@@ -79,6 +89,11 @@ export const attachRealInstance =
       return;
     } };
   },
+  onDelete: ():any=>{
+    return { reply: ():void=>{
+      return;
+    } };
+  },
 };
 
 let useMockAxios = false;
@@ -94,11 +109,17 @@ export function disableMocks(): any {
 function enableMockFunctions():void {
   const mock = useMockAxios?new MockAdapter(axios):attachRealInstance;
   mock.onPut().reply(200);
-
+  mock.onDelete().reply(200);
   mock.onGet("/api/products").reply(200, {
     id: "product",
   });
 
+  mock.onGet("/api/roles").reply(200, {
+    id: "2",
+    name: "Author",
+  });
+
+  mock.onGet("/api/products/exists").reply(200);
   mock.onPost("http://172.31.34.235:1337/admin/login").reply(200,
       { data: {
         token: "jsgfkjdsgsdgsjdgl2343535235",
@@ -116,8 +137,6 @@ function enableMockFunctions():void {
         },
       } } );
 
-
-  mock.onGet("/api/products/exists").reply(200);
   mock.onPost("/api/auth/local/register").reply(200,
       {
         jwt: "jsgfkjdsgsdgsjdgl2343535235",

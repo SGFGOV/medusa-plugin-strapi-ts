@@ -1,11 +1,11 @@
 import { BaseService } from "medusa-interfaces";
 import axios, { AxiosResponse, Method } from "axios";
 import crypto = require("crypto");
-import { timeStamp } from "console";
 import { Logger } from "@medusajs/medusa/dist/types/global";
 import { EventBusService, ProductService,
   ProductVariantService, RegionService } from "@medusajs/medusa";
-import { report } from "process";
+import role from
+  "@strapi/plugin-users-permissions/server/content-types/role/index";
 
 const IGNORE_THRESHOLD = 3; // seconds
 
@@ -13,39 +13,39 @@ export interface StrapiMedusaPluginOptions
 {
   encryption_algorithm:string
   strapi_protocol:string;
-  strapi_default_user_email_address: string;
-  strapi_default_user_username:string;
   strapi_host:string;
-  strapi_default_user_firstname:string;
-  strapi_default_user_lastname:string;
-  strapi_default_user_password:string;
-  strapi_admin_username:string;
-  strapi_admin_email:string;
-  strapi_admin_firstname?:string;
-  strapi_admin_lastname?:string;
-  strapi_admin_secret:string;
+  strapi_default_user:MedusaUserType;
+  strapi_admin:AdminUserType;
   strapi_port:string
   strapi_secret?:string;
   strapi_public_key?:string;
   strapi_ignore_threshold:number;
 }
 
-export interface MedusaUserId{
+/* export interface MedusaUserId{
   username: string;
   password: string,
   email: string,
   confirmed: boolean,
   blocked: boolean,
-  provider: string,
-}
+  provider?: string,
+}*/
 
-export type UserType = {
+export type AdminUserType ={
   email:string;
   username: string;
   password: string;
   firstname?:string;
   name?:string;
   lastname?:string;
+}
+export type MedusaUserType = {
+    username: string;
+    password: string,
+    email: string,
+    confirmed: boolean,
+    blocked: boolean,
+    provider?: string,
 };
 
 class UpdateStrapiService extends BaseService {
@@ -58,7 +58,7 @@ class UpdateStrapiService extends BaseService {
   protocol: string;
   strapi_url: string;
   encryption_key: any;
-  strapiDefaultUserAuthToken: string;
+  strapiDefaultMedusaUserAuthToken: string;
   redis_: any;
   strapiDefaultUserProfile: any;
   key: WithImplicitCoercion<ArrayBuffer | SharedArrayBuffer>;
@@ -97,7 +97,7 @@ class UpdateStrapiService extends BaseService {
 
     this.encryption_key = this.options_.strapi_secret||
     this.options_.strapi_public_key;
-    this.strapiDefaultUserAuthToken = "";
+    this.strapiDefaultMedusaUserAuthToken = "";
     this.isHealthy = false;
     this.checkStrapiHealth().then((res) => {
       if (res) {
@@ -178,6 +178,7 @@ class UpdateStrapiService extends BaseService {
     }
   }
 
+
   async createProductInStrapi(productId):Promise<any> {
     const hasType = await this.getType("products")?true:false;
     if (!hasType) {
@@ -225,6 +226,7 @@ class UpdateStrapiService extends BaseService {
       throw error;
     }
   }
+
 
   async createProductVariantInStrapi(variantId):Promise<any> {
     const hasType = await this.getType("product-variants")
@@ -541,16 +543,17 @@ class UpdateStrapiService extends BaseService {
 
   async getType(type:string, username?: string, email?:string,
       password?: string) :Promise<AxiosResponse> {
-    const loginRespone = await this.loginToStrapi(email, password) as AxiosResponse
-    console.log(loginRespone);
-    this.strapiDefaultUserAuthToken =
+    const loginRespone = await this.
+        loginToStrapi(email, password) as AxiosResponse;
+    // console.log(loginRespone);
+    this.strapiDefaultMedusaUserAuthToken =
     loginRespone.data.jwt;
 
     const config = {
       url: `${this.strapi_url}/api/${type}`,
       method: "get",
       headers: {
-        Authorization: `Bearer ${this.strapiDefaultUserAuthToken}`,
+        Authorization: `Bearer ${this.strapiDefaultMedusaUserAuthToken}`,
       },
     };
 
@@ -567,6 +570,11 @@ class UpdateStrapiService extends BaseService {
     this.logger.info("Checking strapi Health");
     const response = await axios.head(config.url);
     this.isHealthy = response.status == 204 ? true:false;
+    if (this.isHealthy) {
+      this.logger.info("Strapi is healthy");
+    } else {
+      this.logger.info("Strapi is unhealth");
+    }
     return this.isHealthy;
   }
 
@@ -595,15 +603,11 @@ class UpdateStrapiService extends BaseService {
   async registerDefaultMedusaUser() :Promise<AxiosResponse> {
     try {
       const authParams = {
-        username: this.options_.strapi_default_user_username,
-        email: this.options_.strapi_default_user_email_address,
-        password: this.options_.strapi_default_user_password,
-        firstname: this.options_.strapi_default_user_firstname,
-        lastname: this.options_.strapi_default_user_lastname,
+        ...this.options_.strapi_default_user,
       };
       const response = await this.registerMedusaUser(authParams);
-      console.log(response);
-      this.strapiDefaultUserAuthToken = response.data.jwt;
+      // console.log(response);
+      this.strapiDefaultMedusaUserAuthToken = response.data.jwt;
       this.strapiDefaultUserProfile = response.data.user;
       this.strapiDefaultUserId = response.data.user.id;
       return response;
@@ -617,7 +621,7 @@ class UpdateStrapiService extends BaseService {
     try {
       const response = await this.
           deleteMedusaUserFromStrapi(this.strapiDefaultUserId);
-      this.strapiDefaultUserAuthToken = undefined;
+      this.strapiDefaultMedusaUserAuthToken = undefined;
       this.strapiDefaultUserProfile = undefined;
       return response;
     } catch (error) {
@@ -627,32 +631,12 @@ class UpdateStrapiService extends BaseService {
   }
 
   async deleteMedusaUserFromStrapi(id:string):Promise<AxiosResponse> {
-    return await this.strapiSend("delete", "users", id);
+    const result = await this.strapiSend("delete",
+        "users", id);
+    console.log(result);
+    return result;
   }
 
-  /* async deleteMedusaUserFromStrapi(id:string,
-  ):Promise<AxiosResponse> {
-    try {
-      const response = await axios
-          .delete(`${this.strapi_url}/api/users/${id}`,
-              {
-                headers: {
-                  Authorization:
-              `Bearer ${this.strapiAdminAuthToken}`,
-                },
-              });
-
-      console.log(response);
-
-      this.logger.info("Delete "+id+" from strapi");
-      return response;
-    } catch (error) {
-      // Handle error.
-      this.logger.info("An error occurred during delete:",
-          (error as Error).message);
-    }
-    return;
-  }*/
   /** Todo Create API based access
   async fetchMedusaUserApiKey(emailAddress) {
 
@@ -676,20 +660,18 @@ class UpdateStrapiService extends BaseService {
 
   async loginToStrapi(email:string,
       password:string):Promise<AxiosResponse|boolean> {
-    if (await this.checkStrapiHealth()) {
-      this.logger.info("strapi is healthy");
-    } else {
+    if (!await this.checkStrapiHealth()) {
       return false;
     }
     const authData = {
-      identifier: email?? this.options_.strapi_default_user_email_address,
-      password: password?this.encrypt(password):
-      this.encrypt(this.options_.strapi_default_user_password),
+      identifier: email?? this.options_.strapi_default_user.email,
+      password: password??
+          this.options_.strapi_default_user.password,
     };
     try {
       const res = await axios.post(`${this.strapi_url}/api/auth/local`,
           authData);
-      console.log(res);
+      // console.log("login result"+res);
       if (res.data.jwt) {
         this.logger.info(`\n  ${authData.
             identifier} successfully logged in to Strapi \n`);
@@ -699,10 +681,23 @@ class UpdateStrapiService extends BaseService {
     } catch (error) {
       throw new Error(`\n Error  ${authData.
           identifier} while trying to login to strapi\n`+
-      error);
+      (error as Error).message);
     }
 
     return;
+  }
+  async getAuthorRoleId():Promise<number> {
+    const response = await this.
+        strapiAdminSend("get", "roles");
+    // console.log("role:", response);
+    const availableRoles = (response.data.data) as role[];
+    for (const role of availableRoles) {
+      console.log(role);
+      if (role.name == "Author") {
+        return role.id;
+      }
+    }
+    return -1;
   }
 
   async doesEntryExistInStrapi(type, id):Promise<AxiosResponse> {
@@ -724,15 +719,12 @@ class UpdateStrapiService extends BaseService {
   async strapiSend(method:Method, type:string,
       id:string, data?:any, username?:
       string, password?:string, email?:string): Promise<AxiosResponse> {
-    const result = await this.loginToStrapi(email, password);
+    const result = await this.loginToStrapi(email||username, password);
     if (!result) {
       this.logger.error("No user Bearer token");
       return;
     }
-    if (await this.checkStrapiHealth()) {
-      this.logger.info("strapi is healthy");
-    } else {
-      this.logger.info("strapi is unhealthy");
+    if (!await this.checkStrapiHealth()) {
       return;
     }
 
@@ -745,6 +737,7 @@ class UpdateStrapiService extends BaseService {
         Authorization: `Bearer ${resp.data.jwt}`,
       },
     };
+    this.logger.info(JSON.stringify(basicConfig));
     const config = data?{
       ...basicConfig,
       data,
@@ -755,14 +748,15 @@ class UpdateStrapiService extends BaseService {
       const result = await axios({ ...config });
       if (result.status >= 200 && result.status<300) {
         this.logger.info(
-            `St1rapi Ok : ${method}, ${id}, ${type}, ${data}, :status:${result
+            `Strapi Ok : ${method}, ${id}, ${type}, ${data}, :status:${result
                 .status}`);
       }
 
       return result;
     } catch (error) {
       this.logger.info((error as Error).message);
-      throw new Error(`Error while trying to ${method}  entry in strapi `);
+      throw new Error(`Error while trying to ${method},
+       ${id}, ${type}, ${data}  entry in strapi `);
     }
   }
 
@@ -775,16 +769,14 @@ class UpdateStrapiService extends BaseService {
       this.logger.error("No user Bearer token, check axios request");
       return;
     }
-    if (await this.checkStrapiHealth()) {
-      this.logger.info("strapi is healthy");
-    } else {
-      this.logger.info("strapi is unhealthy");
+    if (!await this.checkStrapiHealth()) {
       return;
     }
     let headers = undefined;
     if (this.strapiAdminAuthToken) {
       headers={
-        Authorization: `Bearer ${this.strapiAdminAuthToken}`,
+        "Authorization": `Bearer ${this.strapiAdminAuthToken}`,
+        "Content-type": "application/json",
       };
     }
     const path = [];
@@ -798,6 +790,7 @@ class UpdateStrapiService extends BaseService {
       url: `${this.strapi_url}/admin/${path.join("/")}`,
       headers,
     };
+    this.logger.info("Admin Endpoint fired:", basicConfig.url);
     const config = data?{
       ...basicConfig,
       data,
@@ -813,6 +806,8 @@ class UpdateStrapiService extends BaseService {
                 .status}`);
         this.logger.info(
             `Strapi Data : ${result.data}`);
+      } else {
+        this.logger.info("Admin endpoint error recieved", result);
       }
 
       return result;
@@ -820,7 +815,7 @@ class UpdateStrapiService extends BaseService {
       this.logger.info((error as Error).message);
       throw new Error(`Error while admin ${
         method}, ${id}, ${type}, ${JSON.
-          stringify(data)}, ${action} in strapi `);
+          stringify(data)}, ${action} in strapi`);
     }
   }
 
@@ -828,26 +823,31 @@ class UpdateStrapiService extends BaseService {
     return await this.strapiAdminSend("post",
         "user", undefined, undefined, auth);
   }*/
-  de;
-  async registerMedusaUser(auth:UserType):Promise<AxiosResponse> {
+
+  async registerMedusaUser(auth:MedusaUserType):Promise<AxiosResponse> {
+    let response:AxiosResponse;
     try {
-      const response = await axios.
-          post(`${this.strapi_url}/api/auth/local/register`, auth,
+      response = await axios.
+          post(`${this.strapi_url}/strapi-plugin-medusajs/create-medusa-user`,
+              auth,
           );
-      return response;
     } catch (e) {
-      this.logger.error("unable to register user"+JSON.stringify(e));
+      this.logger.error("unable to register user "+JSON.stringify(e));
     }
+    try {
+      const roleId = await this.getAuthorRoleId();
+      await this. strapiAdminSend("post", "user", undefined, undefined, {
+        ...auth, role: roleId });
+    } catch (e) {
+      this.logger.error("unable to register user as Author"+JSON.stringify(e));
+    }
+    return response;
   }
 
 
   async registerAdminUserInStrapi():Promise<AxiosResponse> {
-    const auth:UserType = {
-      email: this.options_.strapi_admin_email,
-      username: this.options_.strapi_admin_username,
-      firstname: this.options_.strapi_admin_firstname,
-      lastname: this.options_.strapi_admin_lastname,
-      password: this.options_.strapi_admin_secret,
+    const auth:AdminUserType = {
+      ...this.options_.strapi_admin,
     };
 
     return await this.strapiAdminSend("post", "register-admin",
@@ -872,8 +872,8 @@ class UpdateStrapiService extends BaseService {
 
   async loginAsStrapiAdmin():Promise<AxiosResponse> {
     const auth = {
-      email: this.options_.strapi_admin_email,
-      password: this.options_.strapi_admin_secret,
+      email: this.options_.strapi_admin.email,
+      password: this.options_.strapi_admin.password,
     };
 
     try {
@@ -920,36 +920,40 @@ class UpdateStrapiService extends BaseService {
     await this.loginAsStrapiAdmin();
   }
 
-  async loginAsDefaultUser():Promise<AxiosResponse> {
+  async loginAsDefaultMedusaUser():Promise<AxiosResponse> {
     try {
       const authParams = {
-        email: this.options_.strapi_default_user_email_address,
-        password: this.options_.strapi_default_user_password,
+        email: this.options_.strapi_default_user.email,
+        password: this.options_.strapi_default_user.password,
       };
       const response = await this.loginToStrapi(authParams.email,
           authParams.password);
       if (response) {
         const axiosResp = response as AxiosResponse;
-        console.log(response);
-        this.strapiDefaultUserAuthToken = axiosResp.data.jwt;
+        this.strapiDefaultMedusaUserAuthToken = axiosResp.data.jwt;
         this.strapiDefaultUserProfile = axiosResp.data.user;
         this.strapiDefaultUserId = axiosResp.data.user.id;
+        this.logger.info("Default Medusa User Logged In");
         return axiosResp;
       }
     } catch (error) {
-      this.logger.error("unable to register default user",
+      this.logger.error("Unable to register default medusa user",
           (error as Error).message);
+      this.strapiDefaultMedusaUserAuthToken="";
+      this.strapiDefaultUserProfile=undefined;
+      this.strapiDefaultUserId="";
+      throw error;
     }
   }
 
 
-  async registerOrLoginDefaultUser():Promise<void> {
+  async registerOrLoginDefaultMedusaUser():Promise<void> {
     try {
       await this.registerDefaultMedusaUser();
     } catch (e) {
       this.logger.info("default user already registered", JSON.stringify(e));
     }
-    await this.loginAsDefaultUser();
+    await this.loginAsDefaultMedusaUser();
   }
 }
 
