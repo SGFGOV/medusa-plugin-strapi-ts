@@ -80,7 +80,7 @@ describe("StrapiService", () => {
   });
 
   describe("create or register admin", ()=>{
-  it("register or login admin", async ()=>{
+    it("register or login admin", async ()=>{
       await service.registerOrLoginAdmin();
       expect(service.strapiAdminAuthToken).toBeDefined();
       expect(service.strapiAdminAuthToken.length).toBeGreaterThan(0);
