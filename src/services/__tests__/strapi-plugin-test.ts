@@ -80,7 +80,7 @@ describe("StrapiService", () => {
   });
 
   describe("create or register admin", ()=>{
-    it("register or login admin", async ()=>{
+    /* it("register or login admin", async ()=>{
       await service.registerOrLoginAdmin();
       expect(service.strapiAdminAuthToken).toBeDefined();
       expect(service.strapiAdminAuthToken.length).toBeGreaterThan(0);
@@ -88,24 +88,28 @@ describe("StrapiService", () => {
     it("check if default role exists", async ()=>{
       const roleId = await service.getAuthorRoleId();
       expect(roleId).toBeGreaterThan(0);
-    });
+    });*/
 
-    it("register or login default medusa user", async () => {
+    /* it("register or login default medusa user", async () => {
+
       const response = await service.registerOrLoginDefaultMedusaUser();
       console.log(service.strapiDefaultUserId);
       expect(response.data.user.id).toBeDefined();
       expect(response.data.user.id).toBeGreaterThan(0);
-    }, 30000);
+    }, 30000);*/
     it("delete medusa user", async () => {
+      const response = await service.registerOrLoginDefaultMedusaUser();
+
       await service.deleteDefaultMedusaUser();
-      expect(service.loginAsDefaultMedusaUser()).toThrow();
+      const result = await service.loginAsDefaultMedusaUser();
+      expect(result).toBeUndefined();
     }, 30000);
-    it("medusa sync check", async () =>{
+   /* it("medusa sync check", async () =>{
       const result = await service.startInterface() as AxiosResponse;
       console.log(result);
       expect(result.status).toBeGreaterThanOrEqual(200);
       expect(result.status).toBeLessThan(300);
-    });
+    });*/
   });
 
 

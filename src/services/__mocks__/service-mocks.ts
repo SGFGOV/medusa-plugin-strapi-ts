@@ -54,15 +54,15 @@ export const eventBusService = {};
 export const logger = {
 
   info: jest.fn((message: any, optionalParams?: any[]) => {
-    console.info(message, optionalParams);
+    console.info(message);
   },
   ),
   error: jest.fn((message: any, optionalParams?: any[]) => {
-    console.log(message, optionalParams);
+    console.error(message);
   },
   ),
   warn: jest.fn((message: any, optionalParams?: any[]) => {
-    console.log(message, optionalParams);
+    console.warn(message);
   },
   ),
 

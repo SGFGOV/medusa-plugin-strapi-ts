@@ -568,14 +568,20 @@ class UpdateStrapiService extends BaseService {
       url: `${this.strapi_url}/_health`,
     };
     this.logger.info("Checking strapi Health");
-    const response = await axios.head(config.url);
-    this.isHealthy = response.status == 204 ? true:false;
-    if (this.isHealthy) {
-      this.logger.info("Strapi is healthy");
-    } else {
-      this.logger.info("Strapi is unhealth");
+    try {
+      const response = await axios.head(config.url);
+      this.isHealthy = response.status == 204 ? true:false;
+      if (this.isHealthy) {
+        this.logger.info("Strapi is healthy");
+      } else {
+        this.logger.info("Strapi is unhealth");
+      }
+      return this.isHealthy;
+    } catch (error) {
+      this.logger.error("strapi health check failed");
+      this.isHealthy = false;
+      return false;
     }
-    return this.isHealthy;
   }
 
   encrypt(text:string):any {
@@ -620,19 +626,26 @@ class UpdateStrapiService extends BaseService {
   async deleteDefaultMedusaUser() :Promise<AxiosResponse> {
     try {
       const response = await this.
-          deleteMedusaUserFromStrapi(this.strapiDefaultUserId);
+          deleteMedusaUserFromStrapi(this.options_.strapi_default_user.email,
+              this.options_.strapi_default_user.password);
       this.userTokens[this.options_.strapi_default_user.email]="";
       return response;
     } catch (error) {
-      this.logger.error("unable to delete default user",
+      this.logger.error("unable to delete default user: "+
           (error as Error).message);
     }
   }
 
-  async deleteMedusaUserFromStrapi(id:string):Promise<AxiosResponse> {
+  async deleteMedusaUserFromStrapi(email:string,
+      password:string):Promise<AxiosResponse> {
+    const fetchedResult = await this.strapiSend("get", "users", "me",
+        undefined, undefined, password, email);
+    const fetchedUser = fetchedResult.data;
+    this.logger.info("found user: "+ JSON.stringify(fetchedResult.data));
+
+
     const result = await this.strapiSend("delete",
-        "users", id);
-    console.log(result);
+        "users", fetchedUser.id, undefined, undefined, password, email);
     return result;
   }
 
@@ -791,9 +804,10 @@ class UpdateStrapiService extends BaseService {
 
       return result;
     } catch (error) {
-      this.logger.info((error as Error).message);
+      const theError = (error as Error).message;
+      this.logger.info(theError);
       throw new Error(`Error while trying to ${method},
-       ${id}, ${type}, ${data}  entry in strapi `);
+       ${id}, ${type}, ${data}  entry in strapi ${theError}`);
     }
   }
 
@@ -891,6 +905,7 @@ class UpdateStrapiService extends BaseService {
       return { response, adminResponse };
     } catch (e) {
       this.logger.error("unable to register user as Author"+JSON.stringify(e));
+      return { response, adminResponse: undefined };
     }
   }
 
@@ -981,24 +996,33 @@ class UpdateStrapiService extends BaseService {
   }
 
   async loginAsDefaultMedusaUser():Promise<AxiosResponse> {
+    let response:AxiosResponse;
     try {
       const authParams = {
         email: this.options_.strapi_default_user.email,
         password: this.options_.strapi_default_user.password,
       };
-      const response = await this.loginAsStrapiUser(authParams.email,
+      response = await this.loginAsStrapiUser(authParams.email,
           authParams.password);
-      if (response) {
+      if (response && response.status<300 && response.status>=200) {
         const axiosResp = response as AxiosResponse;
         this.strapiDefaultUserId = axiosResp.data.user?.id;
         this.logger.info("Default Medusa User Logged In");
         return axiosResp;
+      } else {
+        throw new Error(`${response.status} received`);
       }
     } catch (error) {
-      this.logger.error("Unable to register default medusa user",
-          (error as Error).message);
       this.strapiDefaultUserId="";
-      throw error;
+      if (!response) {
+        this.logger.error("Unable to login default medusa user: "+
+        (error as Error).message);
+        return;
+      } else {
+        this.logger.error("Error Response: "+
+        (error as Error).message);
+        return response;
+      }
     }
   }
 
