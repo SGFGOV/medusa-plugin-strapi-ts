@@ -558,10 +558,9 @@ class UpdateStrapiService extends BaseService {
         try {
             result = await this.getType(type, authInterface);
         } catch (error) {
+            this.logger.error(`${type} type not found in strapi`);
             this.logger.error(JSON.stringify(error));
-        }
-        if (!result) {
-            throw new Error(`${type} type not found in strapi`);
+            result = false;
         }
         return result ? true : false;
     }
