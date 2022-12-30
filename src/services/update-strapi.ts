@@ -2,6 +2,7 @@ import { BaseService } from "medusa-interfaces";
 import axios, { AxiosResponse, Method } from "axios";
 import crypto = require("crypto");
 import { Logger } from "@medusajs/medusa/dist/types/global";
+import { sleep } from "@medusajs/medusa/dist/utils/sleep";
 import {
     AuthService,
     BaseEntity,
@@ -693,13 +694,23 @@ class UpdateStrapiService extends BaseService {
         return result;
     }
 
-    private async strapiHealthCheck(config): Promise<boolean> {
+    private async executeStrapiHealthCheck(config): Promise<boolean> {
         this.logger.info("Checking strapi Health");
         try {
-            const response = await axios.head(config.url);
+            let response = undefined;
+            let timeOut = process.env.STRAPI_HEALTH_CHECK_INTERVAL
+                ? parseInt(process.env.STRAPI_HEALTH_CHECK_INTERVAL)
+                : 120e3;
+            while (timeOut-- > 0) {
+                response = await axios.head(config.url);
+                if (response && response?.status) {
+                    break;
+                }
+                await sleep(1000);
+            }
             UpdateStrapiService.lastHealthCheckTime = Date.now();
             UpdateStrapiService.isHealthy =
-                response.status < 300 ? true : false;
+                response?.status < 300 ? true : false;
             if (UpdateStrapiService.isHealthy) {
                 this.logger.info("Strapi is healthy");
             } else {
@@ -721,10 +732,12 @@ class UpdateStrapiService extends BaseService {
         };
         const result =
             currentTime - (UpdateStrapiService.lastHealthCheckTime ?? 0) >
-            (process.env.STRAPI_HEALTH_CHECK_INTERVAL ?? 120e3)
-                ? await this.strapiHealthCheck(config)
-                : UpdateStrapiService.isHealthy;
-        UpdateStrapiService.isHealthy = result;
+            (process.env.STRAPI_HEALTH_CHECK_INTERVAL
+                ? parseInt(process.env.STRAPI_HEALTH_CHECK_INTERVAL)
+                : 120e3)
+                ? await this.executeStrapiHealthCheck(config)
+                : UpdateStrapiService.isHealthy; /** sending last known health status */
+
         return result;
     }
 
@@ -763,7 +776,9 @@ class UpdateStrapiService extends BaseService {
             const authParams = {
                 ...this.options_.strapi_default_user
             };
-            const registerResponse = await this.registerMedusaUser(authParams);
+            const registerResponse = await this.executeRegisterMedusaUser(
+                authParams
+            );
             return registerResponse;
         } catch (error) {
             this.logger.error(
@@ -820,6 +835,7 @@ class UpdateStrapiService extends BaseService {
   */
 
     async executeSync(token: string): Promise<AxiosResponse> {
+        await this.waitForHealth();
         const result = await axios.post(
             `${this.strapi_url}/strapi-plugin-medusajs/synchronise-medusa-tables`,
             {},
@@ -838,7 +854,8 @@ class UpdateStrapiService extends BaseService {
     ): Promise<any> {
         const { email } = authInterface;
         try {
-            const jwt = (await this.loginAsStrapiUser(authInterface)).token;
+            const jwt = (await this.executeLoginAsStrapiUser(authInterface))
+                .token;
             if (!jwt) {
                 throw Error("no jwt for this user: " + email);
             }
@@ -850,12 +867,13 @@ class UpdateStrapiService extends BaseService {
         }
     }
 
-    async loginAsStrapiUser(
+    async executeLoginAsStrapiUser(
         authInterface: AuthInterface = {
             email: this.defaultUserEmail,
             password: this.defaultUserPassword
         }
     ): Promise<UserCreds> {
+        await this.waitForHealth();
         const { email, password } = authInterface;
         const authData = {
             identifier: email,
@@ -915,7 +933,7 @@ class UpdateStrapiService extends BaseService {
         return;
     }
     async getAuthorRoleId(): Promise<number> {
-        const response = await this.strapiAdminSend("get", "roles");
+        const response = await this.executeStrapiAdminSend("get", "roles");
         // console.log("role:", response);
         if (response) {
             const availableRoles = response.data.data as role[];
@@ -993,7 +1011,7 @@ class UpdateStrapiService extends BaseService {
     async strapiSend(params: StrapiSendParams): Promise<any> {
         const { method, type, id, data, authInterface } = params;
 
-        const userCreds = await this.loginAsStrapiUser(authInterface);
+        const userCreds = await this.executeLoginAsStrapiUser(authInterface);
 
         try {
             return await this.executeStrapiSend(
@@ -1007,6 +1025,24 @@ class UpdateStrapiService extends BaseService {
             this.logger.error(e.message);
         }
     }
+    /**
+     * Blocks the process until strapi is healthy
+     *
+     *
+     */
+
+    async waitForHealth(): Promise<void> {
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const health = await this.checkStrapiHealth();
+            if (health) {
+                break;
+            }
+            this.logger.debug("Awaiting Strapi Health");
+
+            await sleep(1000);
+        }
+    }
 
     async executeStrapiSend(
         method: Method,
@@ -1015,10 +1051,7 @@ class UpdateStrapiService extends BaseService {
         id?: string,
         data?: any
     ): Promise<any> {
-        if (!(await this.checkStrapiHealth())) {
-            return;
-        }
-
+        await this.waitForHealth();
         const endPoint = `${this.strapi_url}/api/${type}${id ? "/" + id : "/"}`;
         this.logger.info(endPoint);
         const basicConfig = {
@@ -1066,14 +1099,14 @@ class UpdateStrapiService extends BaseService {
         }
     }
 
-    async strapiAdminSend(
+    async executeStrapiAdminSend(
         method: Method,
         type: string,
         id?: string,
         action?: string,
         data?: any
     ): Promise<any> {
-        const result = await this.loginAsStrapiAdmin();
+        const result = await this.executeLoginAsStrapiAdmin();
         if (!result) {
             this.logger.error("No user Bearer token, check axios request");
             return;
@@ -1143,8 +1176,9 @@ class UpdateStrapiService extends BaseService {
         "user", undefined, undefined, auth);
   }*/
 
-    async registerMedusaUser(auth: MedusaUserType): Promise<any> {
+    async executeRegisterMedusaUser(auth: MedusaUserType): Promise<any> {
         let response: AxiosResponse;
+        await this.waitForHealth();
         /* if (auth.email == this.options_.strapi_default_user.email &&
       this.userTokens[auth.email].length>1) {
       return { response: this.strapiDefaultUserResponse, adminResponse: null };
@@ -1167,7 +1201,7 @@ class UpdateStrapiService extends BaseService {
             ...this.options_.strapi_admin
         };
 
-        return await this.strapiAdminSend(
+        return await this.executeStrapiAdminSend(
             "post",
             "register-admin",
             undefined,
@@ -1201,12 +1235,12 @@ class UpdateStrapiService extends BaseService {
         }
         return token;
     }
-    async loginAsStrapiAdmin(): Promise<any> {
+    async executeLoginAsStrapiAdmin(): Promise<any> {
         const auth = {
             email: this.options_.strapi_admin.email,
             password: this.options_.strapi_admin.password
         };
-
+        await this.waitForHealth();
         try {
             let response = await axios.post(
                 `${this.strapi_url}/admin/login`,
@@ -1265,13 +1299,15 @@ class UpdateStrapiService extends BaseService {
                 JSON.stringify(e)
             );
         }
-        return await this.loginAsStrapiAdmin();
+        return await this.executeLoginAsStrapiAdmin();
     }
 
     async loginAsDefaultMedusaUser(): Promise<UserCreds> {
         let response: UserCreds;
         try {
-            response = await this.loginAsStrapiUser(this.defaultAuthInterface);
+            response = await this.executeLoginAsStrapiUser(
+                this.defaultAuthInterface
+            );
             if (response) {
                 this.strapiDefaultUserId = response.user.id;
             }
