@@ -730,14 +730,17 @@ class UpdateStrapiService extends BaseService {
         const config = {
             url: `${this.strapi_url}/_health`
         };
-        const result =
-            currentTime - (UpdateStrapiService.lastHealthCheckTime ?? 0) >
-            (process.env.STRAPI_HEALTH_CHECK_INTERVAL
-                ? parseInt(process.env.STRAPI_HEALTH_CHECK_INTERVAL)
-                : 120e3)
-                ? await this.executeStrapiHealthCheck(config)
-                : UpdateStrapiService.isHealthy; /** sending last known health status */
 
+        const timeInterval = process.env.STRAPI_HEALTH_CHECK_INTERVAL
+            ? parseInt(process.env.STRAPI_HEALTH_CHECK_INTERVAL)
+            : 120e3;
+        const timeDifference =
+            currentTime - (UpdateStrapiService.lastHealthCheckTime ?? 0);
+        const intervalElapsed = timeDifference > timeInterval;
+
+        const result = intervalElapsed
+            ? await this.executeStrapiHealthCheck(config)
+            : UpdateStrapiService.isHealthy; /** sending last known health status */
         return result;
     }
 
