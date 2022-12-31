@@ -100,7 +100,7 @@ class UpdateStrapiService extends BaseService {
             password: this.defaultUserPassword
         };
         this.userTokens = {};
-        this.checkStrapiHealth().then(async (res) => {
+        this.executeStrapiHealthCheck().then(async (res) => {
             if (res) {
                 UpdateStrapiService.isHealthy = res;
                 let startupStatus;
@@ -694,8 +694,11 @@ class UpdateStrapiService extends BaseService {
         return result;
     }
 
-    private async executeStrapiHealthCheck(config): Promise<boolean> {
-        this.logger.info("Checking strapi Health");
+    private async executeStrapiHealthCheck(): Promise<boolean> {
+        const config = {
+            url: `${this.strapi_url}/_health`
+        };
+        this.logger.info("Checking strapi health");
         try {
             let response = undefined;
             let timeOut = process.env.STRAPI_HEALTH_CHECK_INTERVAL
@@ -709,12 +712,16 @@ class UpdateStrapiService extends BaseService {
                 await sleep(1000);
             }
             UpdateStrapiService.lastHealthCheckTime = Date.now();
-            UpdateStrapiService.isHealthy =
-                response?.status < 300 ? true : false;
-            if (UpdateStrapiService.isHealthy) {
-                this.logger.info("Strapi is healthy");
+            if (response) {
+                UpdateStrapiService.isHealthy =
+                    response.status < 300 ? true : false;
+                if (UpdateStrapiService.isHealthy) {
+                    this.logger.info("Strapi is healthy");
+                } else {
+                    this.logger.info("Strapi is unhealthy");
+                }
             } else {
-                this.logger.info("Strapi is unhealth");
+                UpdateStrapiService.isHealthy = false;
             }
 
             return UpdateStrapiService.isHealthy;
@@ -727,9 +734,6 @@ class UpdateStrapiService extends BaseService {
 
     async checkStrapiHealth(): Promise<boolean> {
         const currentTime = Date.now();
-        const config = {
-            url: `${this.strapi_url}/_health`
-        };
 
         const timeInterval = process.env.STRAPI_HEALTH_CHECK_INTERVAL
             ? parseInt(process.env.STRAPI_HEALTH_CHECK_INTERVAL)
@@ -739,7 +743,7 @@ class UpdateStrapiService extends BaseService {
         const intervalElapsed = timeDifference > timeInterval;
 
         const result = intervalElapsed
-            ? await this.executeStrapiHealthCheck(config)
+            ? await this.executeStrapiHealthCheck()
             : UpdateStrapiService.isHealthy; /** sending last known health status */
         return result;
     }
