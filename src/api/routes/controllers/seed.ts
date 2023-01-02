@@ -1,49 +1,20 @@
-import {
-    FulfillmentProviderService,
-    PaymentProviderService,
-    Product,
-    ProductService,
-    Region,
-    RegionService,
-    ShippingOptionService,
-    ShippingProfileService
-} from "@medusajs/medusa";
-import { Request, Response } from "express";
-import { asFunction, asValue } from "awilix";
-
-export default async (req: Request, res: Response) => {
+export default async (req, res) => {
     try {
         const manager = req.scope.resolve("manager");
-        let syncInProgress: boolean;
-        try {
-            /** to handle asynchronous requests */
-            syncInProgress = req.scope.resolve("syncInProgress");
-            if (syncInProgress) {
-                res.status(200).send({ status: "Sync in progress" });
-                return;
-            }
-        } catch (e) {
-            req.scope.register("syncInProgress", asValue(true));
-        }
-
-        const productService = req.scope.resolve(
-            "productService"
-        ) as ProductService;
-        const regionService = req.scope.resolve(
-            "regionService"
-        ) as RegionService;
+        const productService = req.scope.resolve("productService");
+        const regionService = req.scope.resolve("regionService");
         const paymentProviderService = req.scope.resolve(
             "paymentProviderService"
-        ) as PaymentProviderService;
+        );
         const fulfillmentProviderService = req.scope.resolve(
             "fulfillmentProviderService"
-        ) as FulfillmentProviderService;
+        );
         const shippingProfileService = req.scope.resolve(
             "shippingProfileService"
-        ) as ShippingProfileService;
+        );
         const shippingOptionService = req.scope.resolve(
             "shippingOptionService"
-        ) as ShippingOptionService;
+        );
         const regionRepository = req.scope.resolve("regionRepository");
         const shippingProfileRepository = req.scope.resolve(
             "shippingProfileRepository"
@@ -83,13 +54,7 @@ export default async (req: Request, res: Response) => {
             "material",
             "metadata"
         ];
-        const regionFields: any = [
-            "id",
-            "name",
-            "tax_rate",
-            "tax_code",
-            "metadata"
-        ];
+        const regionFields = ["id", "name", "tax_rate", "tax_code", "metadata"];
         const shippingProfileFields = ["id", "name", "type", "metadata"];
         const shippingOptionFields = [
             "id",
@@ -145,7 +110,7 @@ export default async (req: Request, res: Response) => {
         ];
 
         // Fetching all entries at once. Can be optimized
-        const productListConfig: any = {
+        const productListConfig = {
             skip: 0,
             take: allProductsCount,
             select: productFields,
@@ -157,13 +122,13 @@ export default async (req: Request, res: Response) => {
             select: regionFields,
             relations: regionRelations
         };
-        const shippingOptionsConfig: any = {
+        const shippingOptionsConfig = {
             skip: 0,
             take: allShippingOptionCount,
             select: shippingOptionFields,
             relations: shippingOptionRelations
         };
-        const shippingProfileConfig: any = {
+        const shippingProfileConfig = {
             skip: 0,
             take: allShippingProfileCount,
             select: shippingProfileFields,
@@ -193,7 +158,6 @@ export default async (req: Request, res: Response) => {
         };
 
         res.status(200).send(response);
-        req.scope.registerAdd("syncInProgress", asValue(false));
     } catch (error) {
         res.status(400).send(`Webhook error: ${error.message}`);
     }
