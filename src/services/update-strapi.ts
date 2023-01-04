@@ -850,7 +850,7 @@ class UpdateStrapiService extends BaseService {
                 headers: {
                     Authorization: `Bearer ${token}`
                 },
-                timeout: 3600e3
+                timeout: 3600e3 /** temp workaround to stop retransmissions over 900ms*/
             }
         );
         this.logger.info("successfully initiated two way sync<-->medusa");
