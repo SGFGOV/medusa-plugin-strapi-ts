@@ -459,6 +459,41 @@ class UpdateStrapiService extends BaseService {
         }
     }
 
+    async createProductMetafieldInStrapi(
+        data: { id: string },
+        authInterface: AuthInterface = this.defaultAuthInterface
+    ): Promise<any> {
+        const typeExists = await this.checkType("metafields", authInterface);
+        if (!typeExists) {
+            return Promise.resolve();
+        }
+
+        return await this.createEntryInStrapi({
+            type: "metafields",
+            id: data.id,
+            authInterface,
+            data,
+            method: "post"
+        });
+    }
+    async updateProductMetafieldInStrapi(
+        data: { id: string },
+        authInterface: AuthInterface = this.defaultAuthInterface
+    ): Promise<any> {
+        const typeExists = await this.checkType("metafields", authInterface);
+        if (!typeExists) {
+            return Promise.resolve();
+        }
+
+        return await this.createEntryInStrapi({
+            type: "metafields",
+            id: data.id,
+            authInterface,
+            data,
+            method: "put"
+        });
+    }
+
     async updateProductInStrapi(
         data,
         authInterface: AuthInterface = this.defaultAuthInterface
@@ -1058,9 +1093,14 @@ class UpdateStrapiService extends BaseService {
         token: string,
         id?: string,
         data?: any
-    ): Promise<any> {
+    ): Promise<AxiosResponse> {
+        let endPoint: string = undefined;
         await this.waitForHealth();
-        const endPoint = `${this.strapi_url}/api/${type}${id ? "/" + id : "/"}`;
+        if (method != "POST" && method != "post") {
+            endPoint = `${this.strapi_url}/api/${type}${id ? "/" + id : "/"}`;
+        } else {
+            endPoint = `${this.strapi_url}/api/${type}`;
+        }
         this.logger.info(endPoint);
         const basicConfig = {
             method: method,
