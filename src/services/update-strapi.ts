@@ -716,8 +716,27 @@ class UpdateStrapiService extends BaseService {
     }
 
     // Blocker - Delete Region API
-    async deleteRegionInStrapi(data, authInterace): Promise<any> {
-        return;
+    async deleteRegionInStrapi(data, authInterface): Promise<any> {
+        const hasType = await this.getType("product-variants", authInterface)
+            .then(() => true)
+            .catch((err) => {
+                // this.logger.info(err)
+                return false;
+            });
+        if (!hasType) {
+            return Promise.resolve();
+        }
+
+        const ignore = await this.shouldIgnore_(data.id, "strapi");
+        if (ignore) {
+            return Promise.resolve();
+        }
+
+        return await this.deleteEntryInStrapi(
+            "regions",
+            data.id,
+            authInterface
+        );
     }
 
     async getType(type: string, authInterface: AuthInterface): Promise<any> {
