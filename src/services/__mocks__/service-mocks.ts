@@ -110,14 +110,14 @@ export const productVariantService = {
                     title: "test-product-variant",
                     inventory_quantity: 10,
                     allow_backorder: true,
-                    manage_inventory: true
-                    /* prices: [
+                    manage_inventory: true,
+                    prices: [
                         {
                             region_id: "exists",
                             currency_code: "inr",
                             amount: 950
                         }
-                    ]*/
+                    ]
                 });
             }
             return Promise.resolve(undefined);

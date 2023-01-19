@@ -77,6 +77,7 @@ import {
 } from "../types/globals";
 import { EntityManager } from "typeorm";
 import _ from "lodash";
+import { FormData } from "formdata-node";
 
 export type StrapiEntity = BaseEntity & { medusa_id?: string };
 export type AdminResult = { data: any; status: number };
@@ -129,6 +130,16 @@ export interface UpdateStrapiServiceParams {
     productTypeService: ProductTypeService;
     eventBusService: EventBusService;
     logger: Logger;
+}
+
+export interface StrapiFileParams {
+    method: "post" | "put";
+    product_id?: string;
+    type: "product-documents" | "product-medias";
+    fileBuffer?: Buffer;
+    fileUrl?: string;
+    filename: string;
+    authInterface: AuthInterface;
 }
 
 @Service({ scope: "SINGLETON" })
@@ -1802,6 +1813,103 @@ class UpdateStrapiService extends TransactionBaseService {
             }
         }
         return found;
+    }
+
+    async createDocumentData(
+        product_id: string,
+        authInterface: AuthInterface,
+        filename: string,
+        fileBuffer?: Buffer,
+        fileUrl?: string
+    ): Promise<StrapiResult> {
+        if (!fileBuffer && !fileUrl) {
+            this.logger.error(
+                "Either fileBuffer or FileUrl will need to be specified"
+            );
+            return {
+                status: 400
+            };
+        }
+        return await this.strapiSendFileDataLayer({
+            product_id: product_id,
+            type: "product-documents",
+            method: "post",
+            filename,
+            fileBuffer,
+            fileUrl,
+            authInterface
+        });
+    }
+
+    async createMediaFilesData(
+        product_id: string,
+        authInterface: AuthInterface,
+        filename: string,
+        fileBuffer?: Buffer,
+        fileUrl?: string
+    ): Promise<StrapiResult> {
+        if (!fileBuffer && !fileUrl) {
+            this.logger.error(
+                "Either fileBuffer or FileUrl will need to be specified"
+            );
+            return {
+                status: 400
+            };
+        }
+        return await this.strapiSendFileDataLayer({
+            product_id: product_id,
+            type: "product-medias",
+            method: "post",
+            filename,
+            fileBuffer,
+            fileUrl,
+            authInterface
+        });
+    }
+    async strapiSendFileDataLayer(
+        params: StrapiFileParams
+    ): Promise<StrapiResult> {
+        const {
+            method,
+            type,
+            product_id,
+            fileBuffer,
+            authInterface,
+            filename,
+            fileUrl
+        } = params;
+
+        const userCreds = await this.strapiLoginSendDatalayer(authInterface);
+
+        const formData = new FormData();
+        if (fileBuffer) {
+            formData.append("files", fileBuffer);
+        }
+        if (fileUrl) {
+            formData.append("fileUrl", fileUrl);
+        }
+        const id = `${product_id}-${filename.replace(".", "-")}`;
+        formData.append("medusa_id", id);
+        formData.append("filename", filename);
+
+        try {
+            const result = await this.executeStrapiSend(
+                method,
+                type,
+                userCreds.token,
+                method == "post" ? undefined : id,
+                formData
+            );
+            return {
+                id: result.data.id,
+                medusa_id: result.data.medusa_id,
+                status: result.status,
+                data: result.data
+            };
+        } catch (e) {
+            this.logger.error(e.message);
+            return { status: 400 };
+        }
     }
 
     _createStrapiRestQuery(strapiQuery: StrapiQueryInterface): string {
