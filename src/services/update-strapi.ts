@@ -1490,10 +1490,24 @@ export class UpdateStrapiService extends TransactionBaseService {
     async updateEntryInStrapi(
         command: StrapiSendParams
     ): Promise<StrapiResult> {
-        return await this.processStrapiEntry({
-            ...command,
-            method: "put"
-        });
+        try {
+            const result = await this.getEntriesInStrapi({
+                type: command.type,
+                method: "get",
+                id: command.data.id,
+                data: undefined,
+                authInterface: command.authInterface
+            });
+            return await this.processStrapiEntry({
+                ...command,
+                method: "put"
+            });
+        } catch (e) {
+            this.logger.error(
+                `entity doesn't exist in strapi :${e.message} : ${command.id}` +
+                    " , insert not possible"
+            );
+        }
     }
 
     async deleteEntryInStrapi(
